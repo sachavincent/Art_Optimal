@@ -1,0 +1,6 @@
+[Bb]uild/
+out/
+.vs/
+.vscode/
+CMakeFiles/
+CMakeSettings.json
