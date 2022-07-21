@@ -57,6 +57,35 @@ struct Operation
     }
 };
 
+int **GetBiggestSquares(char **in, const uint width, const uint height)
+{
+    int **out = new int *[height];
+    uint i = 0;
+
+    for (uint y = 0; y < height; y++)
+    {
+        out[y] = new int[width];
+        out[y][0] = in[i][0] == '#' ? 1 : 0;
+    }
+
+    for (uint x = 0; x < width; x++)
+        out[0][x] = in[0][x] == '#' ? 1 : 0;
+
+    /* Construct other entries of S[][]*/
+    for (uint i = 1; i < height; i++)
+    {
+        for (uint j = 1; j < width; j++)
+        {
+            if (in[i][j] == '#')
+                out[i][j] = std::min({out[i][j - 1], out[i - 1][j],
+                                      out[i - 1][j - 1]}) +
+                            1; // better of using min in case of arguments more than 2
+            else
+                out[i][j] = 0;
+        }
+    }
+    return out;
+}
 void PrintOperations(const std::string &output, const std::vector<Operation> &operations)
 {
     std::ofstream outputFile(output);
@@ -64,48 +93,26 @@ void PrintOperations(const std::string &output, const std::vector<Operation> &op
         outputFile << op;
 }
 
-std::vector<Operation> CalcOperations(char **pixels, uint width, uint height)
+std::vector<Operation> CalcOperations(int **pixels, uint width, uint height)
 {
     std::unordered_set<Coord> explored;
     std::vector<Operation> operations;
-    for (uint x = 0; x < width; x++)
+
+    for (int y = height - 1; y >= 0; y--)
     {
-        for (uint y = 0; y < height; y++)
+        for (int x = width - 1; x >= 0; x--)
         {
-            Coord coord(x, y);
-            if (explored.find(coord) != explored.end())
+            if(explored.find(Coord(x, y)) != explored.end())
                 continue;
-            char c = pixels[y][x];
-            if (c == '#')
+            int nb = pixels[y][x];
+            explored.insert(Coord(x, y));
+            if (nb > 0)
             {
-                uint size = 1;
-                uint i = 1;
-                std::unordered_set<Coord> exploredTmp;
-                while (x + i < width && y + i < height)
-                {
-                    std::unordered_set<Coord> exploredTmp2;
-                    for (uint cy = y; cy <= y + i; cy++)
-                    {
-                        for (uint cx = x; cx <= x + i; cx++)
-                        {
-                            if (explored.find({cx, cy}) != explored.end())
-                                goto end;
-                            exploredTmp2.insert({cx, cy});
+                for (int j = y; j >= y - nb; j--)
+                    for (int i = x; i >= x - nb; i--)
+                        explored.insert(Coord(i, j));
 
-                            if (pixels[cy][cx] != '#')
-                                goto end;
-                        }
-                    }
-                    for (const auto &c : exploredTmp2)
-                        exploredTmp.insert(c);
-                    size++;
-
-                    i++;
-                }
-            end:
-                for (const auto &c : exploredTmp)
-                    explored.insert(c);
-                operations.push_back(Operation(ACTION_FILL, x, y, size));
+                operations.push_back(Operation(ACTION_FILL, y - nb, x - nb, nb));
             }
         }
     }
@@ -146,8 +153,8 @@ void ParseFile(char *inputFile)
         }
         i++;
     }
-
-    const auto &operations = CalcOperations(pixels, width, height);
+    int **biggestSquares = GetBiggestSquares(pixels, width, height);
+    const auto &operations = CalcOperations(biggestSquares, width, height);
     PrintOperations("output_0.txt", operations);
 
     for (uint y = 0; y < height; y++)
