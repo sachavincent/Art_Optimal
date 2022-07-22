@@ -26,6 +26,7 @@ struct Coord
         return x == other.x && y == other.y;
     }
 };
+
 namespace std
 {
     template <>
@@ -57,69 +58,164 @@ struct Operation
     }
 };
 
-int **GetBiggestSquares(char **in, const uint width, const uint height)
+int **GetBiggestSquares(int **pixels, const uint width, const uint height, const uint offsetX = 0, const uint offsetY = 0)
 {
     int **out = new int *[height];
-    uint i = 0;
 
     for (uint y = 0; y < height; y++)
     {
         out[y] = new int[width];
-        out[y][0] = in[i][0] == '#' ? 1 : 0;
+        for (uint x = 0; x < width; x++)
+            out[y][x] = INT_MAX;
     }
 
-    for (uint x = 0; x < width; x++)
-        out[0][x] = in[0][x] == '#' ? 1 : 0;
+    for (uint y = 0; y < height; y++)
+        out[y][width - 1] = pixels[y + offsetY][width - 1 + offsetX] > 0 ? 1 : 0;
 
-    /* Construct other entries of S[][]*/
-    for (uint i = 1; i < height; i++)
+    for (uint x = 0; x < width; x++)
+        out[height - 1][x] = pixels[height - 1 + offsetY][x + offsetX] > 0 ? 1 : 0;
+
+    for (int y = height - 2; y >= 0; y--)
     {
-        for (uint j = 1; j < width; j++)
+        for (int x = width - 2; x >= 0; x--)
         {
-            if (in[i][j] == '#')
-                out[i][j] = std::min({out[i][j - 1], out[i - 1][j],
-                                      out[i - 1][j - 1]}) +
-                            1; // better of using min in case of arguments more than 2
+            std::cout << x << std::endl;
+            if (pixels[y + offsetY][x + offsetX] == 1)
+                out[y][x] = std::min({out[y][x + 1], out[y + 1][x], out[y + 1][x + 1]}) + 1;
             else
-                out[i][j] = 0;
+                out[y][x] = 0;
         }
     }
     return out;
 }
+
 void PrintOperations(const std::string &output, const std::vector<Operation> &operations)
 {
     std::ofstream outputFile(output);
     for (const auto &op : operations)
         outputFile << op;
+    outputFile.close();
 }
 
+void PrintDebug(const std::string &output, int **pixels, uint width, uint height)
+{
+    std::ofstream outputFile(output);
+    for (uint y = 0; y < height; y++)
+    {
+        for (uint x = 0; x < width; x++)
+            outputFile << pixels[y][x];
+        outputFile << std::endl;
+    }
+    outputFile.close();
+}
+/*
+void OptiSquares(int **in, const uint width, const uint height)
+{
+
+    for (uint y = 0; y < height - 1; y++)
+    {
+        for (uint x = 0; x < width - 1; x++)
+        {
+            int p = in[y][x];
+            if (p > 0)
+            {
+                bool stop = false;
+                uint sizeIncrease = 0;
+                while (!stop)
+                {
+                    bool candidate = true;
+                    for (uint j = y; j < y + p + sizeIncrease; j++)
+                    {
+                        if (in[j][x + p + sizeIncrease] <= 0)
+                        {
+                            candidate = false;
+                            break;
+                        }
+                    }
+                    if (candidate)
+                    {
+                        for (uint i = x; i < x + p + sizeIncrease; i++)
+                        {
+                            if (in[i + p + sizeIncrease][y] <= 0)
+                            {
+                                candidate = false;
+                                break;
+                            }
+                        }
+                    }
+                    if (candidate)
+                        sizeIncrease++;
+                    else
+                        stop = true;
+                }
+                if (sizeIncrease > 0)
+                {
+                    int **newSquares = GetBiggestSquares(in, sizeIncrease + p, sizeIncrease + p, x, y);
+
+                    for (uint j = 0; j < p + sizeIncrease; j++)
+                    {
+                        for (uint i = 0; i < p + sizeIncrease; i++)
+                        {
+                            in[y + j][x + i] = newSquares[j][i];
+                        }
+                    }
+                }
+            }
+        }
+    }
+}*/
 std::vector<Operation> CalcOperations(int **pixels, uint width, uint height)
 {
     std::unordered_set<Coord> explored;
     std::vector<Operation> operations;
 
-    for (int y = height - 1; y >= 0; y--)
+    for (uint y = 0; y < height; y++)
     {
-        for (int x = width - 1; x >= 0; x--)
+        for (uint x = 0; x < width; x++)
         {
-            if(explored.find(Coord(x, y)) != explored.end())
+            if (explored.find(Coord(x, y)) != explored.end())
                 continue;
             int nb = pixels[y][x];
             explored.insert(Coord(x, y));
             if (nb > 0)
             {
-                for (int j = y; j >= y - nb; j--)
-                    for (int i = x; i >= x - nb; i--)
+                for (uint j = y; j < y + nb; j++)
+                    for (uint i = x; i < x + nb; i++)
                         explored.insert(Coord(i, j));
 
-                operations.push_back(Operation(ACTION_FILL, y - nb, x - nb, nb));
+                operations.push_back(Operation(ACTION_FILL, x, y, nb));
             }
         }
     }
 
     return operations;
 }
+std::vector<Operation> CalcOperationsV2(int **pixels, uint width, uint height)
+{
+    std::unordered_set<Coord> explored;
+    std::vector<Operation> operations;
 
+    for (uint y = height-1; y >=0; y--)
+    {
+        for (uint x = width -1; x >=0; x--)
+        {
+            if (explored.find(Coord(x, y)) != explored.end())
+                continue;
+            int nb = pixels[y][x];
+            explored.insert(Coord(x, y));
+            if (nb > 0)
+            {
+                for (uint j = y; j < y + nb; j++)
+                    for (uint i = x; i < x + nb; i++)
+                        explored.insert(Coord(i, j));
+
+                operations.push_back(Operation(ACTION_FILL, x, y, nb));
+            }
+        }
+    }
+
+    return operations;
+}
 void ParseFile(char *inputFile)
 {
     std::ifstream file(inputFile);
@@ -142,18 +238,21 @@ void ParseFile(char *inputFile)
     uint width = std::stoi(size.substr(0, delimSize));
     uint height = std::stoi(size.substr(delimSize + 1));
 
-    char **pixels = new char *[height];
+    int **pixels = new int *[height];
     uint i = 0;
     for (uint y = 0; y < height; y++)
     {
-        pixels[y] = new char[width];
+        pixels[y] = new int[width];
         for (uint x = 0; x < width; x++)
         {
-            pixels[y][x] = chars[i++];
+            pixels[y][x] = chars[i++] == '#' ? 1 : 0;
         }
         i++;
     }
     int **biggestSquares = GetBiggestSquares(pixels, width, height);
+    PrintDebug("debug.txt", biggestSquares, width, height);
+    OptiSquares(biggestSquares, width, height);
+    PrintDebug("debug_2.txt", biggestSquares, width, height);
     const auto &operations = CalcOperations(biggestSquares, width, height);
     PrintOperations("output_0.txt", operations);
 
