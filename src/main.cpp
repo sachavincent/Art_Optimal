@@ -58,6 +58,58 @@ struct Operation
     }
 };
 
+
+bool CheckResults(const std::vector<Operation> &operations, std::deque<char> inputFile, int width, int height, uint &i)
+{
+    std::vector<char> result(width * height, '*');
+    for(const auto& op : operations)
+    {
+        for(auto y = op.y; y < op.y + op.size; y++)
+            for(auto x = op.x; x < op.x + op.size; x++)
+                result[y * width + x] = '#';
+    }
+
+    for(i = 0; i < result.size(); i++)
+    {
+        if(inputFile[i] == '\n')
+            inputFile.pop_front();
+        if(result[i] != inputFile[i])
+            return false;
+    }
+
+    return true;
+}
+int** RotateImage(int** in, uint* width, uint *height, uint rotation)
+{
+    rotation = rotation % 360;
+    uint newHeight = rotation % 180 == 0 ? *height : *width;
+    uint newWidth = rotation % 180 == 0 ? *width : *height;
+    
+    int **out = new int *[newHeight];
+
+    for (uint y = 0; y < newHeight; y++)
+    {
+        out[y] = new int[newWidth];
+        for (uint x = 0; x < newWidth; x++)
+        {
+            int val;
+            if(rotation == 0)
+                val = in[y][x];
+            if (rotation == 90)
+                val = in[newWidth - x - 1][y];
+            else if (rotation == 180)
+                val = in[newHeight - y - 1][newWidth - x - 1];
+            else if (rotation == 270)
+                val = in[x][newHeight - y - 1];
+            out[y][x] = val;
+        }
+    }
+    
+    *width = newWidth;
+    *height = newHeight;
+
+    return out;
+}
 int **GetBiggestSquares(int **pixels, const uint width, const uint height, const uint offsetX = 0, const uint offsetY = 0)
 {
     int **out = new int *[height];
@@ -79,7 +131,6 @@ int **GetBiggestSquares(int **pixels, const uint width, const uint height, const
     {
         for (int x = width - 2; x >= 0; x--)
         {
-            std::cout << x << std::endl;
             if (pixels[y + offsetY][x + offsetX] == 1)
                 out[y][x] = std::min({out[y][x + 1], out[y + 1][x], out[y + 1][x + 1]}) + 1;
             else
@@ -108,6 +159,7 @@ void PrintDebug(const std::string &output, int **pixels, uint width, uint height
     }
     outputFile.close();
 }
+
 /*
 void OptiSquares(int **in, const uint width, const uint height)
 {
@@ -164,7 +216,8 @@ void OptiSquares(int **in, const uint width, const uint height)
         }
     }
 }*/
-std::vector<Operation> CalcOperations(int **pixels, uint width, uint height)
+
+std::vector<Operation> CalcOperations(int **pixels, uint width, uint height, uint rotation)
 {
     std::unordered_set<Coord> explored;
     std::vector<Operation> operations;
@@ -183,13 +236,21 @@ std::vector<Operation> CalcOperations(int **pixels, uint width, uint height)
                     for (uint i = x; i < x + nb; i++)
                         explored.insert(Coord(i, j));
 
-                operations.push_back(Operation(ACTION_FILL, x, y, nb));
+                if (rotation == 0)
+                    operations.push_back(Operation(ACTION_FILL, x, y, nb));
+                else if (rotation == 90)
+                    operations.push_back(Operation(ACTION_FILL, y, width - x - nb, nb));
+                else if (rotation == 180)
+                    operations.push_back(Operation(ACTION_FILL, width - x - nb, height - y - nb, nb));
+                else if (rotation == 270)
+                    operations.push_back(Operation(ACTION_FILL, height - y - nb, x, nb));
             }
         }
     }
 
     return operations;
 }
+
 std::vector<Operation> CalcOperationsV2(int **pixels, uint width, uint height)
 {
     std::unordered_set<Coord> explored;
@@ -205,7 +266,7 @@ std::vector<Operation> CalcOperationsV2(int **pixels, uint width, uint height)
             explored.insert(Coord(x, y));
             if (nb > 0)
             {
-                for (uint j = y; j < y + nb; j++)
+                for (uint j = y; j > y + nb; j++)
                     for (uint i = x; i < x + nb; i++)
                         explored.insert(Coord(i, j));
 
@@ -216,6 +277,7 @@ std::vector<Operation> CalcOperationsV2(int **pixels, uint width, uint height)
 
     return operations;
 }
+
 void ParseFile(char *inputFile)
 {
     std::ifstream file(inputFile);
@@ -249,13 +311,22 @@ void ParseFile(char *inputFile)
         }
         i++;
     }
+    uint cpWidth = width;
+    uint cpHeight = height;
+    uint rotation = 0;
+    pixels = RotateImage(pixels, &width, &height, rotation);
     int **biggestSquares = GetBiggestSquares(pixels, width, height);
-    PrintDebug("debug.txt", biggestSquares, width, height);
-    OptiSquares(biggestSquares, width, height);
-    PrintDebug("debug_2.txt", biggestSquares, width, height);
-    const auto &operations = CalcOperations(biggestSquares, width, height);
-    PrintOperations("output_0.txt", operations);
-
+    //PrintDebug("debug.txt", biggestSquares, width, height);
+    //OptiSquares(biggestSquares, width, height);
+    //PrintDebug("debug_2.txt", biggestSquares, width, height);
+    const auto &operations = CalcOperations(biggestSquares, width, height, rotation);
+    
+    uint indErr;
+    bool work = CheckResults(operations, chars, cpWidth, cpHeight, indErr);
+    if (!work)
+        std::cerr << "Error at " << indErr / cpHeight << ", " << indErr % cpHeight << std::endl;
+    else
+        PrintOperations("output_0.txt", operations);
     for (uint y = 0; y < height; y++)
         delete[] pixels[y];
     delete[] pixels;
