@@ -7,137 +7,28 @@
 #include <iterator>
 #include <iostream>
 #include <unordered_set>
+#include <chrono>
 #include <deque>
+#include "bitmap.h"
+#include "optimizer.h"
 
-using uint = unsigned int;
-
-#define ACTION_FILL "FILL"
-#define ACTION_ERASE "ERASE"
-
-struct Coord
-{
-    uint x;
-    uint y;
-
-    Coord(uint _x, uint _y) : x(_x), y(_y) {}
-
-    bool operator==(const Coord &other) const
-    {
-        return x == other.x && y == other.y;
-    }
-};
-
-namespace std
-{
-    template <>
-    struct hash<Coord>
-    {
-        std::size_t operator()(const Coord &c) const noexcept
-        {
-            return std::hash<int>()(c.x) * 31 + std::hash<int>()(c.y);
-        }
-    };
-}
-
-struct Operation
-{
-    std::string action;
-    uint x;
-    uint y;
-    uint size;
-
-    Operation(std::string _action, uint _x, uint _y, uint _size = 1) : action(_action), x(_x), y(_y), size(_size) {}
-
-    friend std::ostream &operator<<(std::ostream &os, const Operation &o)
-    {
-        os << o.action << "," << o.x << "," << o.y;
-        if (o.action == ACTION_FILL)
-            os << "," << o.size;
-        os << std::endl;
-        return os;
-    }
-};
-
-
-bool CheckResults(const std::vector<Operation> &operations, std::deque<char> inputFile, int width, int height, uint &i)
+bool CheckResults(const std::vector<Operation> &operations, const std::deque<char> &inputFile, int width, int height, uint &i)
 {
     std::vector<char> result(width * height, '*');
-    for(const auto& op : operations)
+    for (const auto &op : operations)
     {
-        for(auto y = op.y; y < op.y + op.size; y++)
-            for(auto x = op.x; x < op.x + op.size; x++)
+        for (auto y = op.coord.y; y < op.coord.y + op.size; y++)
+            for (auto x = op.coord.x; x < op.coord.x + op.size; x++)
                 result[y * width + x] = '#';
     }
 
-    for(i = 0; i < result.size(); i++)
+    for (i = 0; i < result.size(); i++)
     {
-        if(inputFile[i] == '\n')
-            inputFile.pop_front();
-        if(result[i] != inputFile[i])
+        if (result[i] != inputFile[i])
             return false;
     }
 
     return true;
-}
-int** RotateImage(int** in, uint* width, uint *height, uint rotation)
-{
-    rotation = rotation % 360;
-    uint newHeight = rotation % 180 == 0 ? *height : *width;
-    uint newWidth = rotation % 180 == 0 ? *width : *height;
-    
-    int **out = new int *[newHeight];
-
-    for (uint y = 0; y < newHeight; y++)
-    {
-        out[y] = new int[newWidth];
-        for (uint x = 0; x < newWidth; x++)
-        {
-            int val;
-            if(rotation == 0)
-                val = in[y][x];
-            if (rotation == 90)
-                val = in[newWidth - x - 1][y];
-            else if (rotation == 180)
-                val = in[newHeight - y - 1][newWidth - x - 1];
-            else if (rotation == 270)
-                val = in[x][newHeight - y - 1];
-            out[y][x] = val;
-        }
-    }
-    
-    *width = newWidth;
-    *height = newHeight;
-
-    return out;
-}
-int **GetBiggestSquares(int **pixels, const uint width, const uint height, const uint offsetX = 0, const uint offsetY = 0)
-{
-    int **out = new int *[height];
-
-    for (uint y = 0; y < height; y++)
-    {
-        out[y] = new int[width];
-        for (uint x = 0; x < width; x++)
-            out[y][x] = INT_MAX;
-    }
-
-    for (uint y = 0; y < height; y++)
-        out[y][width - 1] = pixels[y + offsetY][width - 1 + offsetX] > 0 ? 1 : 0;
-
-    for (uint x = 0; x < width; x++)
-        out[height - 1][x] = pixels[height - 1 + offsetY][x + offsetX] > 0 ? 1 : 0;
-
-    for (int y = height - 2; y >= 0; y--)
-    {
-        for (int x = width - 2; x >= 0; x--)
-        {
-            if (pixels[y + offsetY][x + offsetX] == 1)
-                out[y][x] = std::min({out[y][x + 1], out[y + 1][x], out[y + 1][x + 1]}) + 1;
-            else
-                out[y][x] = 0;
-        }
-    }
-    return out;
 }
 
 void PrintOperations(const std::string &output, const std::vector<Operation> &operations)
@@ -158,124 +49,6 @@ void PrintDebug(const std::string &output, int **pixels, uint width, uint height
         outputFile << std::endl;
     }
     outputFile.close();
-}
-
-/*
-void OptiSquares(int **in, const uint width, const uint height)
-{
-
-    for (uint y = 0; y < height - 1; y++)
-    {
-        for (uint x = 0; x < width - 1; x++)
-        {
-            int p = in[y][x];
-            if (p > 0)
-            {
-                bool stop = false;
-                uint sizeIncrease = 0;
-                while (!stop)
-                {
-                    bool candidate = true;
-                    for (uint j = y; j < y + p + sizeIncrease; j++)
-                    {
-                        if (in[j][x + p + sizeIncrease] <= 0)
-                        {
-                            candidate = false;
-                            break;
-                        }
-                    }
-                    if (candidate)
-                    {
-                        for (uint i = x; i < x + p + sizeIncrease; i++)
-                        {
-                            if (in[i + p + sizeIncrease][y] <= 0)
-                            {
-                                candidate = false;
-                                break;
-                            }
-                        }
-                    }
-                    if (candidate)
-                        sizeIncrease++;
-                    else
-                        stop = true;
-                }
-                if (sizeIncrease > 0)
-                {
-                    int **newSquares = GetBiggestSquares(in, sizeIncrease + p, sizeIncrease + p, x, y);
-
-                    for (uint j = 0; j < p + sizeIncrease; j++)
-                    {
-                        for (uint i = 0; i < p + sizeIncrease; i++)
-                        {
-                            in[y + j][x + i] = newSquares[j][i];
-                        }
-                    }
-                }
-            }
-        }
-    }
-}*/
-
-std::vector<Operation> CalcOperations(int **pixels, uint width, uint height, uint rotation)
-{
-    std::unordered_set<Coord> explored;
-    std::vector<Operation> operations;
-
-    for (uint y = 0; y < height; y++)
-    {
-        for (uint x = 0; x < width; x++)
-        {
-            if (explored.find(Coord(x, y)) != explored.end())
-                continue;
-            int nb = pixels[y][x];
-            explored.insert(Coord(x, y));
-            if (nb > 0)
-            {
-                for (uint j = y; j < y + nb; j++)
-                    for (uint i = x; i < x + nb; i++)
-                        explored.insert(Coord(i, j));
-
-                if (rotation == 0)
-                    operations.push_back(Operation(ACTION_FILL, x, y, nb));
-                else if (rotation == 90)
-                    operations.push_back(Operation(ACTION_FILL, y, width - x - nb, nb));
-                else if (rotation == 180)
-                    operations.push_back(Operation(ACTION_FILL, width - x - nb, height - y - nb, nb));
-                else if (rotation == 270)
-                    operations.push_back(Operation(ACTION_FILL, height - y - nb, x, nb));
-            }
-        }
-    }
-
-    return operations;
-}
-
-std::vector<Operation> CalcOperationsV2(int **pixels, uint width, uint height)
-{
-    std::unordered_set<Coord> explored;
-    std::vector<Operation> operations;
-
-    for (uint y = height-1; y >=0; y--)
-    {
-        for (uint x = width -1; x >=0; x--)
-        {
-            if (explored.find(Coord(x, y)) != explored.end())
-                continue;
-            int nb = pixels[y][x];
-            explored.insert(Coord(x, y));
-            if (nb > 0)
-            {
-                for (uint j = y; j > y + nb; j++)
-                    for (uint i = x; i < x + nb; i++)
-                        explored.insert(Coord(i, j));
-
-                operations.push_back(Operation(ACTION_FILL, x, y, nb));
-            }
-        }
-    }
-
-    return operations;
 }
 
 void ParseFile(char *inputFile)
@@ -300,36 +73,34 @@ void ParseFile(char *inputFile)
     uint width = std::stoi(size.substr(0, delimSize));
     uint height = std::stoi(size.substr(delimSize + 1));
 
-    int **pixels = new int *[height];
+    Image<char> pixels(width, height);
     uint i = 0;
     for (uint y = 0; y < height; y++)
     {
-        pixels[y] = new int[width];
         for (uint x = 0; x < width; x++)
         {
-            pixels[y][x] = chars[i++] == '#' ? 1 : 0;
+            pixels(y, x) = chars[i++];
         }
-        i++;
+        chars.erase(chars.begin() + i);
     }
-    uint cpWidth = width;
-    uint cpHeight = height;
-    uint rotation = 0;
-    pixels = RotateImage(pixels, &width, &height, rotation);
-    int **biggestSquares = GetBiggestSquares(pixels, width, height);
-    //PrintDebug("debug.txt", biggestSquares, width, height);
-    //OptiSquares(biggestSquares, width, height);
-    //PrintDebug("debug_2.txt", biggestSquares, width, height);
-    const auto &operations = CalcOperations(biggestSquares, width, height, rotation);
-    
+
+    auto start = std::chrono::steady_clock::now();
+
+    Optimizer<char> optimizer(pixels);
+    const auto &operations = optimizer.Optimize([](char c)
+                                                { return c == '#' ? 1 : 0; });
     uint indErr;
-    bool work = CheckResults(operations, chars, cpWidth, cpHeight, indErr);
+    bool work = CheckResults(operations, chars, width, height, indErr);
+    std::cerr << "Nb operations : " << operations.size() << " in " << std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start).count() << " ms" << std::endl;
     if (!work)
-        std::cerr << "Error at " << indErr / cpHeight << ", " << indErr % cpHeight << std::endl;
+        std::cout << "Error at " << indErr / height << ", " << indErr % height << std::endl;
     else
         PrintOperations("output_0.txt", operations);
-    for (uint y = 0; y < height; y++)
-        delete[] pixels[y];
-    delete[] pixels;
+
+    std::vector<RGB> colors = {{230, 25, 75}, {60, 180, 75}, {255, 225, 25}, {0, 130, 200}, {245, 130, 48}, {145, 30, 180}, {70, 240, 240}, {240, 50, 230}, {210, 245, 60}, {250, 190, 212}, {0, 128, 128}, {220, 190, 255}, {170, 110, 40}, {255, 250, 200}, {128, 0, 0}, {170, 255, 195}, {128, 128, 0}, {255, 215, 180}, {0, 0, 128}, {128, 128, 128}};
+    Image<RGB> rgbImage = Utils::DrawOperations(operations, width, height, colors);
+    Bitmap bitmap(rgbImage);
+    bitmap.Export("test.bmp");
 }
 
 int main(int argc, char *argv[])
